@@ -205,6 +205,8 @@
               <option value="hline">Horizontal line</option>
               <option value="vline">Vertical line</option>
               <option value="square">Filled square</option>
+              <option value="circle">Circle</option>
+
               <option value="ring">Ring (donut)</option>
               <option value="checker">Checkerboard</option>
               <option value="noise">Gaussian noise</option>
@@ -221,15 +223,11 @@
               <option value="gradx3">Gradient X (3×3)</option>
               <option value="grady3">Gradient Y (3×3)</option>
               <option value="gradx3_plus_grady3">Grad X + Grad Y  (3×3)</option>
-              <option value="dc_plus_gradx3">DC + Grad Y  (3×3)</option>
+              <option value="dc_plus_gradx3">DC + Grad X  (3×3)</option>
 
-              <option value="blur3">Box blur (3×3)</option>
-              <option value="gauss3">Gaussian-ish (3×3)</option>
-              <option value="sharpen3">Sharpen (3×3)</option>
+              <!--<option value="blur3">Box blur (3×3)</option>-->
+              <option value="gauss3">Gaussian (3×3)</option>
               <option value="laplace3">Laplacian (3×3)</option>
-              <option value="sobelx3">Sobel X (3×3)</option>
-              <option value="sobely3">Sobel Y (3×3)</option>
-              <option value="transport3">Transport-ish (3×3)</option>
               <option value="gauss5">Gaussian (5×5)</option>
               <option value="laplace5">Laplacian (5×5)</option>
             </select>
@@ -241,6 +239,8 @@
               <option value="identity">Identity</option>
               <option value="relu">ReLU</option>
               <option value="tanh">tanh</option>
+              <option value="mod">mod (Absolute Value)</option>
+
             </select>
           </div>
 
@@ -465,45 +465,30 @@ const presets = {
     1,0,-1
   ]},
   grady3: { k:3, w:[
-    1,1,1,
+    -1,-1,-1,
     0,0,0,
-    -1,-1,-1
+    1,1,1
   ]},
   gradx3_plus_grady3: { k:3, w:[
-    1,1,1,
-    0,0,0,
-    -1,-1,-1
+    0,-1,-2,
+    1,0,-1,
+    2,1,0
+  ]},
+  dc_plus_gradx3: { k:3, w:[
+    2,1,0,
+    2,1,0,
+    2,1,0
   ]},
   translate3: { k:3, w:[
     0,0,0,
     1,0,0,
     0,0,0
   ]},
-  sharpen3: { k:3, w:[
-     0,-1, 0,
-    -1, 5,-1,
-     0,-1, 0
-  ]},
+
   laplace3: { k:3, w:[
      0, 1, 0,
      1,-4, 1,
      0, 1, 0
-  ]},
-  sobelx3: { k:3, w:[
-    -1,0,1,
-    -2,0,2,
-    -1,0,1
-  ]},
-  sobely3: { k:3, w:[
-    -1,-2,-1,
-     0, 0, 0,
-     1, 2, 1
-  ]},
-  // "transport-ish": pushes mass right/down a bit (not a true PDE discretization; meant as intuition)
-  transport3: { k:3, w:[
-     0.00, 0.00, 0.00,
-     0.10, 0.10, 0.60,
-     0.00, 0.10, 0.00
   ]},
   gauss5: { k:5, w:(() => {
     // classic separable [1 4 6 4 1] outer-product, normalized
@@ -698,6 +683,15 @@ function makePattern(N, kind) {
       if (i+1 < x.length) x[i+1] = mag * Math.sin(2*Math.PI*u2);
     }
   }
+  else if (kind === "circle") {
+    const r = Math.max(6, (N / 8) | 0);   // radius
+
+    for (let i = 0; i < N; i++) for  (let j = 0; j < N; j++) {
+        const di = i - mid;
+        const dj = j - mid;
+        x[idx(i, j)] = (di * di + dj * dj <= r * r) ? 1 : 0;
+    }
+  }
 
   return x;
 }
@@ -736,6 +730,8 @@ function reflectIndex(i, N) {
 function applyActivation(v, act) {
   if (act === "identity") return v;
   if (act === "relu") return v > 0 ? v : 0;
+  if (act === "mod") return Math.abs(v);
+
   // tanh
   return Math.tanh(v);
 }
@@ -988,8 +984,8 @@ function resetAll() {
   state.padding = "zero";
   state.norm = "perstepstd";
   state.pattern = "impulse";
-  setKernel(3, presets.gauss3.w);
-  el("kernelPreset").value = "gauss3";
+  setKernel(3, presets.dc3.w);
+  el("kernelPreset").value = "dc3";
 
   el("patternSelect").value = state.pattern;
   el("actSelect").value = state.activation;
@@ -1111,8 +1107,8 @@ el("btnGif").addEventListener("click", exportGIF);
 ============================ */
 (function init() {
   // default kernel
-  setKernel(3, presets.gauss3.w);
-  el("kernelPreset").value = "gauss3";
+  setKernel(3, presets.dc3.w);
+  el("kernelPreset").value = "dc3";
 
   setCanvasSize(state.N);
   syncLabels();
