@@ -360,7 +360,7 @@
             <div class="d-flex align-items-center justify-content-between mb-2">
               <div>
                 <div class="h5 mb-0">Kernel editor</div>
-                <div class="muted tiny">Edit grid or paste a matrix. Then click <span class="mono">Simulate</span>.</div>
+                <div class="muted tiny">Edit symmetric/antisymmetric components or paste a matrix. Then click <span class="mono">Simulate</span>.</div>
               </div>
               <div class="d-flex gap-2">
                 <button id="btnNormalizeKernel" class="btn btn-sm btn-darkish">Normalize sum→1</button>
@@ -369,36 +369,68 @@
             </div>
 
             <div class="row g-3 align-items-start">
-              <div class="col-12 col-md-6">
+              <div class="col-12">
                 <label class="form-label">Kernel size</label>
                 <select id="kSize" class="form-select">
                   <option value="3" selected>3×3</option>
                   <option value="5">5×5</option>
                 </select>
 
-                <div class="mt-3" id="kernelGridWrap"></div>
+                <label class="form-label mt-3 d-flex justify-content-between">
+                  <span>Symmetric ↔ Antisymmetric mix (β)</span>
+                  <span class="muted tiny" id="betaLabel">0.50</span>
+                </label>
+                <input id="betaMix" type="range" class="form-range" min="0" max="1" step="0.01" value="0.5"/>
+                <div class="muted tiny" id="betaHint">
+                  β = 0 emphasizes symmetric structure, β = 1 emphasizes antisymmetric structure.
+                </div>
+
+                <div class="mt-3">
+                  <div class="fw-semibold">Mixed kernel (derived)</div>
+                  <div class="muted tiny mb-2">Computed as (1 − β)·sym + β·antisym.</div>
+                  <div id="kernelGridWrap"></div>
+                </div>
 
                 <div class="muted tiny mt-2">
                   Note: convolution here is single-channel. This is meant for intuition about propagation/transport/diffusion.
                 </div>
               </div>
 
-              <div class="col-12 col-md-6">
-                <label class="form-label">Paste kernel (rows separated by newlines)</label>
-                <textarea id="kernelText" class="form-control mono" rows="9"
+              <div class="col-12 col-lg-6">
+                <div class="fw-semibold mb-1">Symmetric component</div>
+                <div id="symKernelGridWrap"></div>
+                <label class="form-label mt-2">Paste symmetric kernel</label>
+                <textarea id="symKernelText" class="form-control mono" rows="7"
                   placeholder="Example 3x3:
 0 1 0
 1 -4 1
 0 1 0"></textarea>
-
                 <div class="d-flex gap-2 mt-2 flex-wrap">
-                  <button id="btnApplyText" class="btn btn-darkish">Apply text → grid</button>
-                  <button id="btnCopyText" class="btn btn-darkish">Copy grid → text</button>
-                  <button id="btnClearKernel" class="btn btn-darkish">Clear</button>
+                  <button id="btnApplySymText" class="btn btn-darkish">Apply text → sym</button>
+                  <button id="btnCopySymText" class="btn btn-darkish">Copy sym → text</button>
+                  <button id="btnClearSym" class="btn btn-darkish">Clear sym</button>
                 </div>
-
                 <div class="muted tiny mt-2">
-                  Parsing accepts spaces or commas. Size must match 3×3 or 5×5.
+                  Symmetric entries are mirrored around the center.
+                </div>
+              </div>
+
+              <div class="col-12 col-lg-6">
+                <div class="fw-semibold mb-1">Antisymmetric component</div>
+                <div id="antiKernelGridWrap"></div>
+                <label class="form-label mt-2">Paste antisymmetric kernel</label>
+                <textarea id="antiKernelText" class="form-control mono" rows="7"
+                  placeholder="Example 3x3:
+0 1 0
+-1 0 1
+0 -1 0"></textarea>
+                <div class="d-flex gap-2 mt-2 flex-wrap">
+                  <button id="btnApplyAntiText" class="btn btn-darkish">Apply text → antisym</button>
+                  <button id="btnCopyAntiText" class="btn btn-darkish">Copy antisym → text</button>
+                  <button id="btnClearAnti" class="btn btn-darkish">Clear antisym</button>
+                </div>
+                <div class="muted tiny mt-2">
+                  Antisymmetric entries flip sign across the center.
                 </div>
               </div>
             </div>
@@ -432,6 +464,9 @@ const state = {
   pattern: "impulse",
   kSize: 3,
   kernel: null,   // Float32Array (k*k)
+  symKernel: null,
+  antiKernel: null,
+  beta: 0.5,
   frames: [],     // Array<Float32Array> length steps+1, each N*N
   t: 0,
   playing: false,
@@ -532,9 +567,39 @@ function setCanvasSize(N) {
 /* ============================
    Kernel UI
 ============================ */
-function makeKernelGrid(k) {
-  state.kSize = k;
-  const wrap = el("kernelGridWrap");
+function formatKernelText(w, k) {
+  const rows = [];
+  for (let y=0;y<k;y++) {
+    const row = [];
+    for (let x=0;x<k;x++) row.push(w[y*k+x].toFixed(4));
+    rows.push(row.join(" "));
+  }
+  return rows.join("\n");
+}
+
+function parseKernelText(txt) {
+  const cleaned = txt.trim();
+  if (!cleaned) return null;
+  const rows = cleaned.split(/\n+/).map(r => r.trim()).filter(Boolean);
+  const parsed = rows.map(r => r.split(/[\s,]+/).filter(Boolean).map(Number));
+  const k = parsed.length;
+  if (!(k===3 || k===5)) {
+    alert("Kernel text must be 3 rows or 5 rows.");
+    return null;
+  }
+  for (const r of parsed) {
+    if (r.length !== k) {
+      alert("Kernel must be a square matrix (3×3 or 5×5).");
+      return null;
+    }
+  }
+  const w = [];
+  for (let y=0;y<k;y++) for (let x=0;x<k;x++) w.push(Number.isFinite(parsed[y][x]) ? parsed[y][x] : 0);
+  return { k, w };
+}
+
+function makeKernelGrid({ wrapId, k, values, readOnly, onInput }) {
+  const wrap = el(wrapId);
   wrap.innerHTML = "";
 
   const grid = document.createElement("div");
@@ -546,13 +611,17 @@ function makeKernelGrid(k) {
     const inp = document.createElement("input");
     inp.type = "number";
     inp.step = "0.01";
-    inp.value = (state.kernel ? state.kernel[i] : 0).toFixed(2);
+    inp.value = (values ? values[i] : 0).toFixed(2);
     inp.className = "form-control form-control-sm mono";
-    inp.addEventListener("input", () => {
-      const v = parseFloat(inp.value);
-      state.kernel[i] = Number.isFinite(v) ? v : 0;
-      el("kernelPreset").value = "custom";
-    });
+    if (readOnly) {
+      inp.disabled = true;
+    } else {
+      inp.addEventListener("input", () => {
+        const v = parseFloat(inp.value);
+        values[i] = Number.isFinite(v) ? v : 0;
+        if (onInput) onInput();
+      });
+    }
     cell.appendChild(inp);
     grid.appendChild(cell);
   }
@@ -560,85 +629,199 @@ function makeKernelGrid(k) {
   wrap.appendChild(grid);
 }
 
-function setKernel(k, w) {
-  state.kSize = k;
-  state.kernel = new Float32Array(w);
-  el("kSize").value = String(k);
-  makeKernelGrid(k);
-  copyGridToText();
+function decomposeKernel(w, k) {
+  const sym = new Float32Array(k*k);
+  const anti = new Float32Array(k*k);
+  for (let y=0;y<k;y++) {
+    for (let x=0;x<k;x++) {
+      const i = y*k + x;
+      const my = k - 1 - y;
+      const mx = k - 1 - x;
+      const j = my*k + mx;
+      const a = w[i];
+      const b = w[j];
+      sym[i] = (a + b) / 2;
+      anti[i] = (a - b) / 2;
+    }
+  }
+  return { sym, anti };
 }
 
-function readKernelFromGrid() {
-  const k = state.kSize;
-  const inputs = el("kernelGridWrap").querySelectorAll("input");
-  const w = new Float32Array(k*k);
-  inputs.forEach((inp, i) => {
-    const v = parseFloat(inp.value);
-    w[i] = Number.isFinite(v) ? v : 0;
-  });
-  state.kernel = w;
+function combineKernel(sym, anti, beta) {
+  const w = new Float32Array(sym.length);
+  for (let i=0;i<w.length;i++) {
+    w[i] = (1 - beta) * sym[i] + beta * anti[i];
+  }
   return w;
 }
 
-function copyGridToText() {
-  const k = state.kSize;
-  const w = readKernelFromGrid();
-  const rows = [];
-  for (let y=0;y<k;y++) {
-    const row = [];
-    for (let x=0;x<k;x++) row.push(w[y*k+x].toFixed(4));
-    rows.push(row.join(" "));
-  }
-  el("kernelText").value = rows.join("\n");
+function updateKernelFromComponents() {
+  state.kernel = combineKernel(state.symKernel, state.antiKernel, state.beta);
+  makeKernelGrid({
+    wrapId: "kernelGridWrap",
+    k: state.kSize,
+    values: state.kernel,
+    readOnly: true,
+  });
 }
 
-function applyTextToGrid() {
-  const txt = el("kernelText").value.trim();
-  if (!txt) return;
+function updateComponentEditors() {
+  makeKernelGrid({
+    wrapId: "symKernelGridWrap",
+    k: state.kSize,
+    values: state.symKernel,
+    readOnly: false,
+    onInput: () => {
+      el("kernelPreset").value = "custom";
+      updateBetaAvailability();
+      updateKernelFromComponents();
+      updateComponentTexts();
+    },
+  });
+  makeKernelGrid({
+    wrapId: "antiKernelGridWrap",
+    k: state.kSize,
+    values: state.antiKernel,
+    readOnly: false,
+    onInput: () => {
+      el("kernelPreset").value = "custom";
+      updateBetaAvailability();
+      updateKernelFromComponents();
+      updateComponentTexts();
+    },
+  });
+}
 
-  const rows = txt.split(/\n+/).map(r => r.trim()).filter(Boolean);
-  const parsed = rows.map(r => r.split(/[\s,]+/).filter(Boolean).map(Number));
+function updateComponentTexts() {
+  el("symKernelText").value = formatKernelText(state.symKernel, state.kSize);
+  el("antiKernelText").value = formatKernelText(state.antiKernel, state.kSize);
+}
 
-  const k = parsed.length;
-  if (!(k===3 || k===5)) {
-    alert("Kernel text must be 3 rows or 5 rows.");
-    return;
+function updateBetaAvailability() {
+  const eps = 1e-8;
+  const symEnergy = state.symKernel.reduce((acc, v) => acc + Math.abs(v), 0);
+  const antiEnergy = state.antiKernel.reduce((acc, v) => acc + Math.abs(v), 0);
+  const betaInput = el("betaMix");
+  if (symEnergy < eps) {
+    state.beta = 1;
+    betaInput.disabled = true;
+    el("betaHint").textContent = "No symmetric component detected; β fixed at 1.";
+  } else if (antiEnergy < eps) {
+    state.beta = 0;
+    betaInput.disabled = true;
+    el("betaHint").textContent = "No antisymmetric component detected; β fixed at 0.";
+  } else {
+    betaInput.disabled = false;
+    el("betaHint").textContent = "β = 0 emphasizes symmetric structure, β = 1 emphasizes antisymmetric structure.";
   }
-  for (const r of parsed) {
-    if (r.length !== k) {
-      alert("Kernel must be a square matrix (3×3 or 5×5).");
-      return;
-    }
-  }
+  betaInput.value = state.beta.toFixed(2);
+  el("betaLabel").textContent = state.beta.toFixed(2);
+}
 
-  const w = [];
-  for (let y=0;y<k;y++) for (let x=0;x<k;x++) w.push(Number.isFinite(parsed[y][x]) ? parsed[y][x] : 0);
-  setKernel(k, w);
-  el("kernelPreset").value = "custom";
+function resizeKernelArray(old, oldK, newK) {
+  const w = new Float32Array(newK*newK);
+  if (!old || !oldK) return w;
+  const minK = Math.min(oldK, newK);
+  const oldRad = (oldK/2)|0;
+  const newRad = (newK/2)|0;
+  for (let y=0;y<minK;y++) for (let x=0;x<minK;x++) {
+    const oy = y + (oldRad - ((minK/2)|0));
+    const ox = x + (oldRad - ((minK/2)|0));
+    const ny = y + (newRad - ((minK/2)|0));
+    const nx = x + (newRad - ((minK/2)|0));
+    w[ny*newK + nx] = old[oy*oldK + ox] || 0;
+  }
+  return w;
+}
+
+function setKernel(k, w) {
+  state.kSize = k;
+  const { sym, anti } = decomposeKernel(w, k);
+  state.symKernel = sym;
+  state.antiKernel = anti;
+  state.beta = 0.5;
+  el("kSize").value = String(k);
+  updateBetaAvailability();
+  updateKernelFromComponents();
+  updateComponentEditors();
+  updateComponentTexts();
 }
 
 function normalizeKernelSumTo1() {
-  const w = readKernelFromGrid();
+  const w = combineKernel(state.symKernel, state.antiKernel, state.beta);
   let s = 0;
   for (let i=0;i<w.length;i++) s += w[i];
   if (Math.abs(s) < 1e-12) return;
-  for (let i=0;i<w.length;i++) w[i] /= s;
-  state.kernel = w;
-  makeKernelGrid(state.kSize);
-  copyGridToText();
+  const scale = 1 / s;
+  for (let i=0;i<state.symKernel.length;i++) {
+    state.symKernel[i] *= scale;
+    state.antiKernel[i] *= scale;
+  }
+  updateBetaAvailability();
+  updateKernelFromComponents();
+  updateComponentEditors();
+  updateComponentTexts();
   el("kernelPreset").value = "custom";
 }
 
 function zeroMeanKernel() {
-  const w = readKernelFromGrid();
   let m = 0;
-  for (let i=0;i<w.length;i++) m += w[i];
-  m /= w.length;
-  for (let i=0;i<w.length;i++) w[i] -= m;
-  state.kernel = w;
-  makeKernelGrid(state.kSize);
-  copyGridToText();
+  for (let i=0;i<state.symKernel.length;i++) m += state.symKernel[i];
+  m /= state.symKernel.length;
+  for (let i=0;i<state.symKernel.length;i++) state.symKernel[i] -= m;
+  updateBetaAvailability();
+  updateKernelFromComponents();
+  updateComponentEditors();
+  updateComponentTexts();
   el("kernelPreset").value = "custom";
+}
+
+function applySymText() {
+  const parsed = parseKernelText(el("symKernelText").value);
+  if (!parsed) return;
+  const oldK = state.kSize;
+  state.kSize = parsed.k;
+  state.symKernel = new Float32Array(parsed.w);
+  state.antiKernel = resizeKernelArray(state.antiKernel, oldK, parsed.k);
+  el("kSize").value = String(parsed.k);
+  el("kernelPreset").value = "custom";
+  updateBetaAvailability();
+  updateKernelFromComponents();
+  updateComponentEditors();
+  updateComponentTexts();
+}
+
+function applyAntiText() {
+  const parsed = parseKernelText(el("antiKernelText").value);
+  if (!parsed) return;
+  const oldK = state.kSize;
+  state.kSize = parsed.k;
+  state.antiKernel = new Float32Array(parsed.w);
+  state.symKernel = resizeKernelArray(state.symKernel, oldK, parsed.k);
+  el("kSize").value = String(parsed.k);
+  el("kernelPreset").value = "custom";
+  updateBetaAvailability();
+  updateKernelFromComponents();
+  updateComponentEditors();
+  updateComponentTexts();
+}
+
+function clearSymKernel() {
+  state.symKernel = new Float32Array(state.kSize * state.kSize);
+  el("kernelPreset").value = "custom";
+  updateBetaAvailability();
+  updateKernelFromComponents();
+  updateComponentEditors();
+  updateComponentTexts();
+}
+
+function clearAntiKernel() {
+  state.antiKernel = new Float32Array(state.kSize * state.kSize);
+  el("kernelPreset").value = "custom";
+  updateBetaAvailability();
+  updateKernelFromComponents();
+  updateComponentEditors();
+  updateComponentTexts();
 }
 
 /* ============================
@@ -868,7 +1051,7 @@ function simulate() {
 
   const N = state.N;
   const k = state.kSize;
-  const w = readKernelFromGrid();
+  const w = state.kernel || combineKernel(state.symKernel, state.antiKernel, state.beta);
   const act = state.activation;
   const pad = state.padding;
   const normMode = state.norm;
@@ -1045,37 +1228,35 @@ el("kernelPreset").addEventListener("change", (e) => {
 
 el("kSize").addEventListener("change", (e) => {
   const k = parseInt(e.target.value, 10);
-  // keep existing values when resizing if possible; otherwise default zeros
-  const old = readKernelFromGrid();
   const oldK = state.kSize;
-  const w = new Float32Array(k*k);
-  if (old && oldK) {
-    const minK = Math.min(oldK, k);
-    const oldRad = (oldK/2)|0;
-    const newRad = (k/2)|0;
-    for (let y=0;y<minK;y++) for (let x=0;x<minK;x++) {
-      const oy = y + (oldRad - ((minK/2)|0));
-      const ox = x + (oldRad - ((minK/2)|0));
-      const ny = y + (newRad - ((minK/2)|0));
-      const nx = x + (newRad - ((minK/2)|0));
-      w[ny*k + nx] = old[oy*oldK + ox] || 0;
-    }
-  }
-  state.kernel = w;
-  makeKernelGrid(k);
-  copyGridToText();
+  state.symKernel = resizeKernelArray(state.symKernel, oldK, k);
+  state.antiKernel = resizeKernelArray(state.antiKernel, oldK, k);
+  state.kSize = k;
+  updateBetaAvailability();
+  updateKernelFromComponents();
+  updateComponentEditors();
+  updateComponentTexts();
   el("kernelPreset").value = "custom";
+});
+
+el("betaMix").addEventListener("input", (e) => {
+  state.beta = parseFloat(e.target.value);
+  el("betaLabel").textContent = state.beta.toFixed(2);
+  updateKernelFromComponents();
 });
 
 el("btnNormalizeKernel").addEventListener("click", normalizeKernelSumTo1);
 el("btnZeroMeanKernel").addEventListener("click", zeroMeanKernel);
-el("btnApplyText").addEventListener("click", applyTextToGrid);
-el("btnCopyText").addEventListener("click", copyGridToText);
-el("btnClearKernel").addEventListener("click", () => {
-  const k = state.kSize;
-  setKernel(k, new Array(k*k).fill(0));
-  el("kernelPreset").value = "custom";
+el("btnApplySymText").addEventListener("click", applySymText);
+el("btnCopySymText").addEventListener("click", () => {
+  el("symKernelText").value = formatKernelText(state.symKernel, state.kSize);
 });
+el("btnClearSym").addEventListener("click", clearSymKernel);
+el("btnApplyAntiText").addEventListener("click", applyAntiText);
+el("btnCopyAntiText").addEventListener("click", () => {
+  el("antiKernelText").value = formatKernelText(state.antiKernel, state.kSize);
+});
+el("btnClearAnti").addEventListener("click", clearAntiKernel);
 
 el("btnSim").addEventListener("click", () => {
   setCanvasSize(state.N);
