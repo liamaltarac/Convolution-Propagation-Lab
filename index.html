@@ -389,10 +389,41 @@
               <div id="kernelGridWrap"></div>
             </div>
 
-            <div class="mt-3">
-              <div class="fw-semibold">Paste full kernel</div>
-              <div class="muted tiny mb-2">
-                Paste a full 3×3 or 5×5 kernel and we'll decompose it into symmetric + antisymmetric components.
+                <label class="form-label mt-3 d-flex justify-content-between">
+                  <span>Symmetric ↔ Antisymmetric mix (β)</span>
+                  <span class="muted tiny" id="betaLabel">0.50</span>
+                </label>
+                <input id="betaMix" type="range" class="form-range" min="0" max="1" step="0.01" value="0.5"/>
+                <div class="muted tiny" id="betaHint">
+                  β = 0 emphasizes symmetric structure, β = 1 emphasizes antisymmetric structure.
+                </div>
+
+                <div class="mt-3">
+                  <div class="fw-semibold">Mixed kernel (derived)</div>
+                  <div class="muted tiny mb-2">Computed as (1 − β)·sym + β·antisym.</div>
+                  <div id="kernelGridWrap"></div>
+                </div>
+
+                <div class="mt-3">
+                  <div class="fw-semibold">Paste full kernel</div>
+                  <div class="muted tiny mb-2">
+                    Paste a full 3×3 or 5×5 kernel and we'll decompose it into symmetric + antisymmetric components.
+                  </div>
+                  <textarea id="fullKernelText" class="form-control mono" rows="7"
+                    placeholder="Example 3x3:
+0 1 0
+1 -4 1
+0 1 0"></textarea>
+                  <div class="d-flex gap-2 mt-2 flex-wrap">
+                    <button id="btnApplyFullText" class="btn btn-darkish">Apply text → split</button>
+                    <button id="btnCopyFullText" class="btn btn-darkish">Copy mixed → text</button>
+                    <button id="btnClearFull" class="btn btn-darkish">Clear full kernel</button>
+                  </div>
+                </div>
+
+                <div class="muted tiny mt-2">
+                  Note: convolution here is single-channel. This is meant for intuition about propagation/transport/diffusion.
+                </div>
               </div>
               <textarea id="fullKernelText" class="form-control mono" rows="7"
                 placeholder="Example 3x3:
