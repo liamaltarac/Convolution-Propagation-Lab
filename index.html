@@ -184,8 +184,6 @@
 
 
   <div class="row g-3" id="app">
-
-
     <!-- Left: Controls -->
     <div class="col-12 col-lg-5">
       <div class="card p-3 p-md-4 h-100">
@@ -315,12 +313,9 @@
       </div>
     </div>
 
-    <!-- Right: View + Kernel editor -->
+    <!-- Right: Viewer -->
     <div class="col-12 col-lg-7">
-      <div class="row g-3">
-        <!-- Viewer -->
-        <div class="col-12">
-          <div class="card p-3 p-md-4">
+      <div class="card p-3 p-md-4 h-100">
             <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-2">
               <div>
                 <div class="h5 mb-0">Viewer</div>
@@ -351,96 +346,112 @@
                 </select>
               </div>
             </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="row g-3 mt-3">
+    <!-- Kernel Editor -->
+    <div class="col-12">
+      <div class="card p-3 p-md-4">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <div>
+            <div class="h5 mb-0">Kernel editor</div>
+            <div class="muted tiny">Edit symmetric/antisymmetric components or paste a matrix. Then click <span class="mono">Simulate</span>.</div>
+          </div>
+          <div class="d-flex gap-2">
+            <button id="btnNormalizeKernel" class="btn btn-sm btn-darkish">Normalize sum→1</button>
+            <button id="btnZeroMeanKernel" class="btn btn-sm btn-darkish">Zero-mean</button>
           </div>
         </div>
 
-        <!-- Kernel Editor -->
-        <div class="col-12">
-          <div class="card p-3 p-md-4">
-            <div class="d-flex align-items-center justify-content-between mb-2">
-              <div>
-                <div class="h5 mb-0">Kernel editor</div>
-                <div class="muted tiny">Edit symmetric/antisymmetric components or paste a matrix. Then click <span class="mono">Simulate</span>.</div>
-              </div>
-              <div class="d-flex gap-2">
-                <button id="btnNormalizeKernel" class="btn btn-sm btn-darkish">Normalize sum→1</button>
-                <button id="btnZeroMeanKernel" class="btn btn-sm btn-darkish">Zero-mean</button>
-              </div>
+        <div class="row g-3 align-items-start">
+          <div class="col-12">
+            <label class="form-label">Kernel size</label>
+            <select id="kSize" class="form-select">
+              <option value="3" selected>3×3</option>
+              <option value="5">5×5</option>
+            </select>
+
+            <label class="form-label mt-3 d-flex justify-content-between">
+              <span>Symmetric ↔ Antisymmetric mix (β)</span>
+              <span class="muted tiny" id="betaLabel">0.50</span>
+            </label>
+            <input id="betaMix" type="range" class="form-range" min="0" max="1" step="0.01" value="0.5"/>
+            <div class="muted tiny" id="betaHint">
+              β = 0 emphasizes symmetric structure, β = 1 emphasizes antisymmetric structure.
             </div>
 
-            <div class="row g-3 align-items-start">
-              <div class="col-12">
-                <label class="form-label">Kernel size</label>
-                <select id="kSize" class="form-select">
-                  <option value="3" selected>3×3</option>
-                  <option value="5">5×5</option>
-                </select>
+            <div class="mt-3">
+              <div class="fw-semibold">Mixed kernel (derived)</div>
+              <div class="muted tiny mb-2">Computed as (1 − β)·sym + β·antisym.</div>
+              <div id="kernelGridWrap"></div>
+            </div>
 
-                <label class="form-label mt-3 d-flex justify-content-between">
-                  <span>Symmetric ↔ Antisymmetric mix (β)</span>
-                  <span class="muted tiny" id="betaLabel">0.50</span>
-                </label>
-                <input id="betaMix" type="range" class="form-range" min="0" max="1" step="0.01" value="0.5"/>
-                <div class="muted tiny" id="betaHint">
-                  β = 0 emphasizes symmetric structure, β = 1 emphasizes antisymmetric structure.
-                </div>
-
-                <div class="mt-3">
-                  <div class="fw-semibold">Mixed kernel (derived)</div>
-                  <div class="muted tiny mb-2">Computed as (1 − β)·sym + β·antisym.</div>
-                  <div id="kernelGridWrap"></div>
-                </div>
-
-                <div class="muted tiny mt-2">
-                  Note: convolution here is single-channel. This is meant for intuition about propagation/transport/diffusion.
-                </div>
+            <div class="mt-3">
+              <div class="fw-semibold">Paste full kernel</div>
+              <div class="muted tiny mb-2">
+                Paste a full 3×3 or 5×5 kernel and we'll decompose it into symmetric + antisymmetric components.
               </div>
-
-              <div class="col-12 col-lg-6">
-                <div class="fw-semibold mb-1">Symmetric component</div>
-                <div id="symKernelGridWrap"></div>
-                <label class="form-label mt-2">Paste symmetric kernel</label>
-                <textarea id="symKernelText" class="form-control mono" rows="7"
-                  placeholder="Example 3x3:
+              <textarea id="fullKernelText" class="form-control mono" rows="7"
+                placeholder="Example 3x3:
 0 1 0
 1 -4 1
 0 1 0"></textarea>
-                <div class="d-flex gap-2 mt-2 flex-wrap">
-                  <button id="btnApplySymText" class="btn btn-darkish">Apply text → sym</button>
-                  <button id="btnCopySymText" class="btn btn-darkish">Copy sym → text</button>
-                  <button id="btnClearSym" class="btn btn-darkish">Clear sym</button>
-                </div>
-                <div class="muted tiny mt-2">
-                  Symmetric entries are mirrored around the center.
-                </div>
-              </div>
-
-              <div class="col-12 col-lg-6">
-                <div class="fw-semibold mb-1">Antisymmetric component</div>
-                <div id="antiKernelGridWrap"></div>
-                <label class="form-label mt-2">Paste antisymmetric kernel</label>
-                <textarea id="antiKernelText" class="form-control mono" rows="7"
-                  placeholder="Example 3x3:
-0 1 0
--1 0 1
-0 -1 0"></textarea>
-                <div class="d-flex gap-2 mt-2 flex-wrap">
-                  <button id="btnApplyAntiText" class="btn btn-darkish">Apply text → antisym</button>
-                  <button id="btnCopyAntiText" class="btn btn-darkish">Copy antisym → text</button>
-                  <button id="btnClearAnti" class="btn btn-darkish">Clear antisym</button>
-                </div>
-                <div class="muted tiny mt-2">
-                  Antisymmetric entries flip sign across the center.
-                </div>
+              <div class="d-flex gap-2 mt-2 flex-wrap">
+                <button id="btnApplyFullText" class="btn btn-darkish">Apply text → split</button>
+                <button id="btnCopyFullText" class="btn btn-darkish">Copy mixed → text</button>
+                <button id="btnClearFull" class="btn btn-darkish">Clear full kernel</button>
               </div>
             </div>
 
+            <div class="muted tiny mt-2">
+              Note: convolution here is single-channel. This is meant for intuition about propagation/transport/diffusion.
+            </div>
+          </div>
+
+          <div class="col-12 col-lg-6">
+            <div class="fw-semibold mb-1">Symmetric component</div>
+            <div id="symKernelGridWrap"></div>
+            <label class="form-label mt-2">Paste symmetric kernel</label>
+            <textarea id="symKernelText" class="form-control mono" rows="7"
+              placeholder="Example 3x3:
+0 1 0
+1 -4 1
+0 1 0"></textarea>
+            <div class="d-flex gap-2 mt-2 flex-wrap">
+              <button id="btnApplySymText" class="btn btn-darkish">Apply text → sym</button>
+              <button id="btnCopySymText" class="btn btn-darkish">Copy sym → text</button>
+              <button id="btnClearSym" class="btn btn-darkish">Clear sym</button>
+            </div>
+            <div class="muted tiny mt-2">
+              Symmetric entries are mirrored around the center.
+            </div>
+          </div>
+
+          <div class="col-12 col-lg-6">
+            <div class="fw-semibold mb-1">Antisymmetric component</div>
+            <div id="antiKernelGridWrap"></div>
+            <label class="form-label mt-2">Paste antisymmetric kernel</label>
+            <textarea id="antiKernelText" class="form-control mono" rows="7"
+              placeholder="Example 3x3:
+0 1 0
+-1 0 1
+0 -1 0"></textarea>
+            <div class="d-flex gap-2 mt-2 flex-wrap">
+              <button id="btnApplyAntiText" class="btn btn-darkish">Apply text → antisym</button>
+              <button id="btnCopyAntiText" class="btn btn-darkish">Copy antisym → text</button>
+              <button id="btnClearAnti" class="btn btn-darkish">Clear antisym</button>
+            </div>
+            <div class="muted tiny mt-2">
+              Antisymmetric entries flip sign across the center.
+            </div>
           </div>
         </div>
 
       </div>
     </div>
-
   </div>
 
   <footer class="my-4 text-center muted tiny">
@@ -663,6 +674,7 @@ function updateKernelFromComponents() {
     values: state.kernel,
     readOnly: true,
   });
+  updateFullKernelText();
 }
 
 function updateComponentEditors() {
@@ -695,6 +707,11 @@ function updateComponentEditors() {
 function updateComponentTexts() {
   el("symKernelText").value = formatKernelText(state.symKernel, state.kSize);
   el("antiKernelText").value = formatKernelText(state.antiKernel, state.kSize);
+}
+
+function updateFullKernelText() {
+  const w = state.kernel || combineKernel(state.symKernel, state.antiKernel, state.beta);
+  el("fullKernelText").value = formatKernelText(w, state.kSize);
 }
 
 function updateBetaAvailability() {
@@ -806,6 +823,13 @@ function applyAntiText() {
   updateComponentTexts();
 }
 
+function applyFullText() {
+  const parsed = parseKernelText(el("fullKernelText").value);
+  if (!parsed) return;
+  setKernel(parsed.k, parsed.w);
+  el("kernelPreset").value = "custom";
+}
+
 function clearSymKernel() {
   state.symKernel = new Float32Array(state.kSize * state.kSize);
   el("kernelPreset").value = "custom";
@@ -816,6 +840,16 @@ function clearSymKernel() {
 }
 
 function clearAntiKernel() {
+  state.antiKernel = new Float32Array(state.kSize * state.kSize);
+  el("kernelPreset").value = "custom";
+  updateBetaAvailability();
+  updateKernelFromComponents();
+  updateComponentEditors();
+  updateComponentTexts();
+}
+
+function clearFullKernel() {
+  state.symKernel = new Float32Array(state.kSize * state.kSize);
   state.antiKernel = new Float32Array(state.kSize * state.kSize);
   el("kernelPreset").value = "custom";
   updateBetaAvailability();
@@ -1257,6 +1291,12 @@ el("btnCopyAntiText").addEventListener("click", () => {
   el("antiKernelText").value = formatKernelText(state.antiKernel, state.kSize);
 });
 el("btnClearAnti").addEventListener("click", clearAntiKernel);
+el("btnApplyFullText").addEventListener("click", applyFullText);
+el("btnCopyFullText").addEventListener("click", () => {
+  const w = state.kernel || combineKernel(state.symKernel, state.antiKernel, state.beta);
+  el("fullKernelText").value = formatKernelText(w, state.kSize);
+});
+el("btnClearFull").addEventListener("click", clearFullKernel);
 
 el("btnSim").addEventListener("click", () => {
   setCanvasSize(state.N);
