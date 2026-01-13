@@ -391,6 +391,23 @@
                   <div id="kernelGridWrap"></div>
                 </div>
 
+                <div class="mt-3">
+                  <div class="fw-semibold">Paste full kernel</div>
+                  <div class="muted tiny mb-2">
+                    Paste a full 3×3 or 5×5 kernel and we'll decompose it into symmetric + antisymmetric components.
+                  </div>
+                  <textarea id="fullKernelText" class="form-control mono" rows="7"
+                    placeholder="Example 3x3:
+0 1 0
+1 -4 1
+0 1 0"></textarea>
+                  <div class="d-flex gap-2 mt-2 flex-wrap">
+                    <button id="btnApplyFullText" class="btn btn-darkish">Apply text → split</button>
+                    <button id="btnCopyFullText" class="btn btn-darkish">Copy mixed → text</button>
+                    <button id="btnClearFull" class="btn btn-darkish">Clear full kernel</button>
+                  </div>
+                </div>
+
                 <div class="muted tiny mt-2">
                   Note: convolution here is single-channel. This is meant for intuition about propagation/transport/diffusion.
                 </div>
@@ -663,6 +680,7 @@ function updateKernelFromComponents() {
     values: state.kernel,
     readOnly: true,
   });
+  updateFullKernelText();
 }
 
 function updateComponentEditors() {
@@ -695,6 +713,11 @@ function updateComponentEditors() {
 function updateComponentTexts() {
   el("symKernelText").value = formatKernelText(state.symKernel, state.kSize);
   el("antiKernelText").value = formatKernelText(state.antiKernel, state.kSize);
+}
+
+function updateFullKernelText() {
+  const w = state.kernel || combineKernel(state.symKernel, state.antiKernel, state.beta);
+  el("fullKernelText").value = formatKernelText(w, state.kSize);
 }
 
 function updateBetaAvailability() {
@@ -806,6 +829,13 @@ function applyAntiText() {
   updateComponentTexts();
 }
 
+function applyFullText() {
+  const parsed = parseKernelText(el("fullKernelText").value);
+  if (!parsed) return;
+  setKernel(parsed.k, parsed.w);
+  el("kernelPreset").value = "custom";
+}
+
 function clearSymKernel() {
   state.symKernel = new Float32Array(state.kSize * state.kSize);
   el("kernelPreset").value = "custom";
@@ -816,6 +846,16 @@ function clearSymKernel() {
 }
 
 function clearAntiKernel() {
+  state.antiKernel = new Float32Array(state.kSize * state.kSize);
+  el("kernelPreset").value = "custom";
+  updateBetaAvailability();
+  updateKernelFromComponents();
+  updateComponentEditors();
+  updateComponentTexts();
+}
+
+function clearFullKernel() {
+  state.symKernel = new Float32Array(state.kSize * state.kSize);
   state.antiKernel = new Float32Array(state.kSize * state.kSize);
   el("kernelPreset").value = "custom";
   updateBetaAvailability();
@@ -1257,6 +1297,12 @@ el("btnCopyAntiText").addEventListener("click", () => {
   el("antiKernelText").value = formatKernelText(state.antiKernel, state.kSize);
 });
 el("btnClearAnti").addEventListener("click", clearAntiKernel);
+el("btnApplyFullText").addEventListener("click", applyFullText);
+el("btnCopyFullText").addEventListener("click", () => {
+  const w = state.kernel || combineKernel(state.symKernel, state.antiKernel, state.beta);
+  el("fullKernelText").value = formatKernelText(w, state.kSize);
+});
+el("btnClearFull").addEventListener("click", clearFullKernel);
 
 el("btnSim").addEventListener("click", () => {
   setCanvasSize(state.N);
