@@ -216,6 +216,13 @@
             <select id="kernelPreset" class="form-select">
               <option value="custom">Custom (editable)</option>
               <option value="identity3">Identity (3×3)</option>
+              <option value="translate3">Translate (3×3)</option>
+              <option value="dc3">DC (3×3)</option>
+              <option value="gradx3">Gradient X (3×3)</option>
+              <option value="grady3">Gradient Y (3×3)</option>
+              <option value="gradx3_plus_grady3">Grad X + Grad Y  (3×3)</option>
+              <option value="dc_plus_gradx3">DC + Grad Y  (3×3)</option>
+
               <option value="blur3">Box blur (3×3)</option>
               <option value="gauss3">Gaussian-ish (3×3)</option>
               <option value="sharpen3">Sharpen (3×3)</option>
@@ -277,9 +284,9 @@
               <span class="muted tiny" id="normLabel">per-step std</span>
             </label>
             <select id="normSelect" class="form-select">
+                <option value="none">None</option>
               <option value="perstepstd">Per-step: divide by std</option>
               <option value="perstepmax">Per-step: scale to max |x|</option>
-              <option value="none">None</option>
             </select>
           </div>
 
@@ -447,6 +454,31 @@ const presets = {
     2,4,2,
     1,2,1
   ].map(v=>v/16)},
+  dc3: { k:3, w:[
+    1,1,1,
+    1,1,1,
+    1,1,1
+  ]},
+  gradx3: { k:3, w:[
+    1,0,-1,
+    1,0,-1,
+    1,0,-1
+  ]},
+  grady3: { k:3, w:[
+    1,1,1,
+    0,0,0,
+    -1,-1,-1
+  ]},
+  gradx3_plus_grady3: { k:3, w:[
+    1,1,1,
+    0,0,0,
+    -1,-1,-1
+  ]},
+  translate3: { k:3, w:[
+    0,0,0,
+    1,0,0,
+    0,0,0
+  ]},
   sharpen3: { k:3, w:[
      0,-1, 0,
     -1, 5,-1,
@@ -906,7 +938,7 @@ async function exportGIF() {
     quality: 10,
     width: N,
     height: N,
-    workerScript: "https://cdn.jsdelivr.net/npm/gif.js.optimized/dist/gif.worker.js"
+    workerScript:  "./gif.worker.js"
   });
 
   // Render each frame onto the existing canvas then add it
