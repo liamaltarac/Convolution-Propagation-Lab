@@ -1,0 +1,1095 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Convolution Propagation Lab</title>
+
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
+
+  <!-- gif.js (client-side GIF encoding) -->
+  <script src="https://cdn.jsdelivr.net/npm/gif.js.optimized/dist/gif.min.js"></script>
+
+  <style>
+    :root{
+      --card-radius: 16px;
+      --bg: #ffffff;
+      --text: #111827;          /* near-black */
+      --muted: #6b7280;         /* gray */
+      --border: #e5e7eb;        /* light gray border */
+      --panel: #ffffff;
+      --canvas-bg: #f8fafc;     /* very light gray */
+      --btn: #111827;
+      --btn-hover: #0b1220;
+      --btn-text: #ffffff;
+    }
+  
+    body{
+      background: var(--bg);
+      color: var(--text);
+    }
+  
+    .navbar{
+      background: var(--bg) !important;
+      border-bottom: 1px solid var(--border);
+    }
+    .navbar .navbar-brand{ color: var(--text) !important; }
+    .navbar .badge{ color: var(--text); }
+  
+    .card{
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--card-radius);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+  
+    .muted{ color: var(--muted); }
+  
+    .canvas-wrap{
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      background: var(--canvas-bg);
+      border-radius: var(--card-radius);
+      border: 1px solid var(--border);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      overflow:hidden;
+    }
+  
+    canvas{
+      image-rendering: pixelated;
+      width: 100%;
+      height: 100%;
+    }
+  
+    .kernel-grid{ display:grid; gap:8px; }
+    .kernel-grid.k3{ grid-template-columns: repeat(3, 1fr); }
+    .kernel-grid.k5{ grid-template-columns: repeat(5, 1fr); }
+    .kcell input{ text-align:center; font-variant-numeric: tabular-nums; }
+  
+    .badge-soft{
+      background: #f3f4f6;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+  
+    /* Neutral dark button (for Play/Pause/etc.) */
+    .btn-darkish{
+      background: var(--btn);
+      border: 1px solid var(--btn);
+      color: var(--btn-text);
+    }
+    .btn-darkish:hover{
+      background: var(--btn-hover);
+      border-color: var(--btn-hover);
+      color: var(--btn-text);
+    }
+  
+    /* Make outline buttons look nice on white */
+    .btn-outline-secondary{
+      border-color: var(--border);
+      color: var(--text);
+    }
+    .btn-outline-secondary:hover{
+      background: #f3f4f6;
+      border-color: var(--border);
+      color: var(--text);
+    }
+  
+    /* Form polish */
+    .form-control, .form-select{
+      border-color: var(--border);
+    }
+    .form-control:focus, .form-select:focus{
+      border-color: #9ca3af;
+      box-shadow: 0 0 0 0.2rem rgba(156,163,175,0.25);
+    }
+  
+    .form-range::-webkit-slider-thumb{ background: var(--text); }
+    .form-range::-moz-range-thumb{ background: var(--text); border: none; }
+  
+    .tiny{ font-size: 0.86rem; }
+    .mono{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+                   "Liberation Mono", "Courier New", monospace;
+    }
+  </style>
+  
+</head>
+
+<body>
+<nav class="navbar navbar-expand-lg navbar-dark" style="background:#0b0f19;">
+  <div class="container py-2">
+    <span class="navbar-brand fw-semibold">Convolution Propagation Lab</span>
+    <span class="badge badge-soft rounded-pill">browser-only • interactive • GIF export</span>
+  </div>
+</nav>
+
+<main class="container my-4">
+<!-- About / Description -->
+<section class="mb-3">
+    <div class="card p-3 p-md-4">
+      <div class="d-flex flex-wrap align-items-start justify-content-between gap-2">
+        <div>
+          <div class="h4 mb-1">What this is</div>
+          <div class="muted">
+            An interactive sandbox to study how repeated convolution + nonlinearity changes signals in image space.
+            Choose an input pattern, pick or edit a kernel, and watch the evolution over time.
+          </div>
+        </div>
+        <div class="d-flex gap-2">
+          <a class="btn btn-outline-secondary btn-sm" href="#app">Jump to app</a>
+          <button class="btn btn-darkish btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#aboutMore">
+            More details
+          </button>
+        </div>
+      </div>
+  
+      <div class="collapse mt-3" id="aboutMore">
+        <div class="row g-3">
+          <div class="col-12 col-lg-6">
+            <div class="fw-semibold mb-1">Core update rule</div>
+            <div class="mono p-2" style="background:#f8fafc;border:1px solid var(--border);border-radius:12px;">
+              x<sub>t+1</sub> = act( conv(x<sub>t</sub>, W) )
+            </div>
+            <div class="muted tiny mt-2">
+              You can switch activation, boundary handling, and per-step normalization to isolate different effects.
+            </div>
+          </div>
+  
+          <div class="col-12 col-lg-6">
+            <div class="fw-semibold mb-1">What to look for</div>
+            <ul class="mb-0 muted">
+              <li><span class="text-body">Diffusion vs transport:</span> does energy spread symmetrically or drift?</li>
+              <li><span class="text-body">Stability:</span> does the signal explode, vanish, or converge?</li>
+              <li><span class="text-body">Bias from nonlinearity:</span> how ReLU changes propagation vs identity.</li>
+              <li><span class="text-body">Boundary effects:</span> zero vs wrap vs reflect.</li>
+            </ul>
+          </div>
+  
+          <div class="col-12">
+            <div class="fw-semibold mb-1">Notes</div>
+            <div class="muted tiny">
+              This is a single-channel toy model intended for intuition. It does not reproduce full CNN training dynamics,
+              but it helps visualize how kernel structure and nonlinearities shape signal flow over repeated layers/steps.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+  
+
+
+  <div class="row g-3" id="app">
+
+
+    <!-- Left: Controls -->
+    <div class="col-12 col-lg-5">
+      <div class="card p-3 p-md-4 h-100">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <div>
+            <div class="h5 mb-0">Controls</div>
+            <div class="muted tiny">Iterate: x ← act(conv(x, W))</div>
+          </div>
+          <button id="btnReset" class="btn btn-sm btn-darkish">Reset</button>
+        </div>
+
+        <div class="row g-3">
+          <div class="col-12 col-md-6">
+            <label class="form-label">Pattern</label>
+            <select id="patternSelect" class="form-select">
+              <option value="impulse">Impulse (delta)</option>
+              <option value="hline">Horizontal line</option>
+              <option value="vline">Vertical line</option>
+              <option value="square">Filled square</option>
+              <option value="ring">Ring (donut)</option>
+              <option value="checker">Checkerboard</option>
+              <option value="noise">Gaussian noise</option>
+            </select>
+          </div>
+
+          <div class="col-12 col-md-6">
+            <label class="form-label">Kernel preset</label>
+            <select id="kernelPreset" class="form-select">
+              <option value="custom">Custom (editable)</option>
+              <option value="identity3">Identity (3×3)</option>
+              <option value="blur3">Box blur (3×3)</option>
+              <option value="gauss3">Gaussian-ish (3×3)</option>
+              <option value="sharpen3">Sharpen (3×3)</option>
+              <option value="laplace3">Laplacian (3×3)</option>
+              <option value="sobelx3">Sobel X (3×3)</option>
+              <option value="sobely3">Sobel Y (3×3)</option>
+              <option value="transport3">Transport-ish (3×3)</option>
+              <option value="gauss5">Gaussian (5×5)</option>
+              <option value="laplace5">Laplacian (5×5)</option>
+            </select>
+          </div>
+
+          <div class="col-12 col-md-6">
+            <label class="form-label">Activation</label>
+            <select id="actSelect" class="form-select">
+              <option value="identity">Identity</option>
+              <option value="relu">ReLU</option>
+              <option value="tanh">tanh</option>
+            </select>
+          </div>
+
+          <div class="col-12 col-md-6">
+            <label class="form-label">Boundary</label>
+            <select id="padSelect" class="form-select">
+              <option value="zero">Zero padding (SAME)</option>
+              <option value="wrap">Wrap (circular)</option>
+              <option value="reflect">Reflect</option>
+            </select>
+          </div>
+
+          <div class="col-12">
+            <label class="form-label d-flex justify-content-between">
+              <span>Grid size</span>
+              <span class="muted tiny"><span id="gridSizeLabel">128</span>×<span id="gridSizeLabel2">128</span></span>
+            </label>
+            <input id="gridSize" type="range" class="form-range" min="64" max="256" step="32" value="128"/>
+            <div class="muted tiny">Higher = slower, but smoother gifs. 128 is a good default.</div>
+          </div>
+
+          <div class="col-12">
+            <label class="form-label d-flex justify-content-between">
+              <span>Steps (T)</span>
+              <span class="muted tiny" id="stepsLabel">40</span>
+            </label>
+            <input id="steps" type="range" class="form-range" min="1" max="200" step="1" value="40"/>
+          </div>
+
+          <div class="col-12">
+            <label class="form-label d-flex justify-content-between">
+              <span>Playback FPS</span>
+              <span class="muted tiny" id="fpsLabel">20</span>
+            </label>
+            <input id="fps" type="range" class="form-range" min="5" max="60" step="1" value="20"/>
+          </div>
+
+          <div class="col-12">
+            <label class="form-label d-flex justify-content-between">
+              <span>Normalization</span>
+              <span class="muted tiny" id="normLabel">per-step std</span>
+            </label>
+            <select id="normSelect" class="form-select">
+              <option value="perstepstd">Per-step: divide by std</option>
+              <option value="perstepmax">Per-step: scale to max |x|</option>
+              <option value="none">None</option>
+            </select>
+          </div>
+
+          <div class="col-12">
+            <div class="d-flex gap-2 flex-wrap">
+              <button id="btnSim" class="btn btn-primary">Simulate</button>
+              <button id="btnPlay" class="btn btn-darkish">Play</button>
+              <button id="btnPause" class="btn btn-darkish">Pause</button>
+              <button id="btnStep" class="btn btn-darkish">Step +1</button>
+            </div>
+            <div class="mt-2 muted tiny">
+              Tip: hit <span class="mono">Simulate</span> after editing the kernel, then <span class="mono">Play</span>.
+            </div>
+          </div>
+
+          <div class="col-12">
+            <div class="d-flex gap-2 flex-wrap align-items-center">
+              <button id="btnGif" class="btn btn-success">Export GIF</button>
+              <div class="muted tiny" id="gifStatus"></div>
+            </div>
+            <div class="muted tiny mt-1">
+              GIF export captures all frames (0..T). Larger grids/steps increase time & file size.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: View + Kernel editor -->
+    <div class="col-12 col-lg-7">
+      <div class="row g-3">
+        <!-- Viewer -->
+        <div class="col-12">
+          <div class="card p-3 p-md-4">
+            <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-2">
+              <div>
+                <div class="h5 mb-0">Viewer</div>
+                <div class="muted tiny">Rendered as a signed heatmap (blue↔red)</div>
+              </div>
+              <div class="d-flex gap-2 align-items-center">
+                <span class="badge badge-soft rounded-pill">t = <span id="tLabel">0</span></span>
+                <span class="badge badge-soft rounded-pill">μ = <span id="muLabel">0</span></span>
+                <span class="badge badge-soft rounded-pill">σ = <span id="sigmaLabel">0</span></span>
+              </div>
+            </div>
+
+            <div class="canvas-wrap">
+              <canvas id="view" width="128" height="128"></canvas>
+            </div>
+
+            <div class="row g-2 mt-3">
+              <div class="col-12 col-md-6">
+                <label class="form-label">Colormap gain</label>
+                <input id="gain" type="range" class="form-range" min="0.2" max="5" step="0.05" value="1.5"/>
+                <div class="muted tiny">Higher gain = more contrast (good for diffusion tails).</div>
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label">Show center crosshair</label>
+                <select id="crosshair" class="form-select">
+                  <option value="on" selected>On</option>
+                  <option value="off">Off</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Kernel Editor -->
+        <div class="col-12">
+          <div class="card p-3 p-md-4">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <div>
+                <div class="h5 mb-0">Kernel editor</div>
+                <div class="muted tiny">Edit grid or paste a matrix. Then click <span class="mono">Simulate</span>.</div>
+              </div>
+              <div class="d-flex gap-2">
+                <button id="btnNormalizeKernel" class="btn btn-sm btn-darkish">Normalize sum→1</button>
+                <button id="btnZeroMeanKernel" class="btn btn-sm btn-darkish">Zero-mean</button>
+              </div>
+            </div>
+
+            <div class="row g-3 align-items-start">
+              <div class="col-12 col-md-6">
+                <label class="form-label">Kernel size</label>
+                <select id="kSize" class="form-select">
+                  <option value="3" selected>3×3</option>
+                  <option value="5">5×5</option>
+                </select>
+
+                <div class="mt-3" id="kernelGridWrap"></div>
+
+                <div class="muted tiny mt-2">
+                  Note: convolution here is single-channel. This is meant for intuition about propagation/transport/diffusion.
+                </div>
+              </div>
+
+              <div class="col-12 col-md-6">
+                <label class="form-label">Paste kernel (rows separated by newlines)</label>
+                <textarea id="kernelText" class="form-control mono" rows="9"
+                  placeholder="Example 3x3:
+0 1 0
+1 -4 1
+0 1 0"></textarea>
+
+                <div class="d-flex gap-2 mt-2 flex-wrap">
+                  <button id="btnApplyText" class="btn btn-darkish">Apply text → grid</button>
+                  <button id="btnCopyText" class="btn btn-darkish">Copy grid → text</button>
+                  <button id="btnClearKernel" class="btn btn-darkish">Clear</button>
+                </div>
+
+                <div class="muted tiny mt-2">
+                  Parsing accepts spaces or commas. Size must match 3×3 or 5×5.
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <footer class="my-4 text-center muted tiny">
+    Built with Bootstrap + Canvas + gif.js • No server required
+  </footer>
+</main>
+
+<script>
+/* ============================
+   State
+============================ */
+const state = {
+  N: 128,
+  steps: 40,
+  fps: 20,
+  gain: 1.5,
+  crosshair: true,
+  activation: "identity",
+  padding: "zero",
+  norm: "perstepstd",
+  pattern: "impulse",
+  kSize: 3,
+  kernel: null,   // Float32Array (k*k)
+  frames: [],     // Array<Float32Array> length steps+1, each N*N
+  t: 0,
+  playing: false,
+  lastFrameTime: 0,
+};
+
+const presets = {
+  identity3: { k:3, w:[
+    0,0,0,
+    0,1,0,
+    0,0,0
+  ]},
+  blur3: { k:3, w:[
+    1,1,1,
+    1,1,1,
+    1,1,1
+  ].map(v=>v/9)},
+  gauss3: { k:3, w:[
+    1,2,1,
+    2,4,2,
+    1,2,1
+  ].map(v=>v/16)},
+  sharpen3: { k:3, w:[
+     0,-1, 0,
+    -1, 5,-1,
+     0,-1, 0
+  ]},
+  laplace3: { k:3, w:[
+     0, 1, 0,
+     1,-4, 1,
+     0, 1, 0
+  ]},
+  sobelx3: { k:3, w:[
+    -1,0,1,
+    -2,0,2,
+    -1,0,1
+  ]},
+  sobely3: { k:3, w:[
+    -1,-2,-1,
+     0, 0, 0,
+     1, 2, 1
+  ]},
+  // "transport-ish": pushes mass right/down a bit (not a true PDE discretization; meant as intuition)
+  transport3: { k:3, w:[
+     0.00, 0.00, 0.00,
+     0.10, 0.10, 0.60,
+     0.00, 0.10, 0.00
+  ]},
+  gauss5: { k:5, w:(() => {
+    // classic separable [1 4 6 4 1] outer-product, normalized
+    const g = [1,4,6,4,1];
+    const w = [];
+    let s=0;
+    for (let y=0;y<5;y++) for (let x=0;x<5;x++){ const v=g[y]*g[x]; w.push(v); s+=v; }
+    return w.map(v=>v/s);
+  })()},
+  laplace5: { k:5, w:[
+     0, 0,-1, 0, 0,
+     0,-1,-2,-1, 0,
+    -1,-2,16,-2,-1,
+     0,-1,-2,-1, 0,
+     0, 0,-1, 0, 0
+  ]},
+};
+
+/* ============================
+   DOM
+============================ */
+const el = (id) => document.getElementById(id);
+
+const view = el("view");
+const ctx = view.getContext("2d", { willReadFrequently: true });
+
+function syncLabels() {
+  el("gridSizeLabel").textContent = state.N;
+  el("gridSizeLabel2").textContent = state.N;
+  el("stepsLabel").textContent = state.steps;
+  el("fpsLabel").textContent = state.fps;
+  el("tLabel").textContent = state.t;
+  el("gain").value = state.gain;
+}
+
+function setCanvasSize(N) {
+  view.width = N;
+  view.height = N;
+}
+
+/* ============================
+   Kernel UI
+============================ */
+function makeKernelGrid(k) {
+  state.kSize = k;
+  const wrap = el("kernelGridWrap");
+  wrap.innerHTML = "";
+
+  const grid = document.createElement("div");
+  grid.className = `kernel-grid ${k===3 ? "k3":"k5"}`;
+
+  for (let i=0;i<k*k;i++) {
+    const cell = document.createElement("div");
+    cell.className = "kcell";
+    const inp = document.createElement("input");
+    inp.type = "number";
+    inp.step = "0.01";
+    inp.value = (state.kernel ? state.kernel[i] : 0).toFixed(2);
+    inp.className = "form-control form-control-sm mono";
+    inp.addEventListener("input", () => {
+      const v = parseFloat(inp.value);
+      state.kernel[i] = Number.isFinite(v) ? v : 0;
+      el("kernelPreset").value = "custom";
+    });
+    cell.appendChild(inp);
+    grid.appendChild(cell);
+  }
+
+  wrap.appendChild(grid);
+}
+
+function setKernel(k, w) {
+  state.kSize = k;
+  state.kernel = new Float32Array(w);
+  el("kSize").value = String(k);
+  makeKernelGrid(k);
+  copyGridToText();
+}
+
+function readKernelFromGrid() {
+  const k = state.kSize;
+  const inputs = el("kernelGridWrap").querySelectorAll("input");
+  const w = new Float32Array(k*k);
+  inputs.forEach((inp, i) => {
+    const v = parseFloat(inp.value);
+    w[i] = Number.isFinite(v) ? v : 0;
+  });
+  state.kernel = w;
+  return w;
+}
+
+function copyGridToText() {
+  const k = state.kSize;
+  const w = readKernelFromGrid();
+  const rows = [];
+  for (let y=0;y<k;y++) {
+    const row = [];
+    for (let x=0;x<k;x++) row.push(w[y*k+x].toFixed(4));
+    rows.push(row.join(" "));
+  }
+  el("kernelText").value = rows.join("\n");
+}
+
+function applyTextToGrid() {
+  const txt = el("kernelText").value.trim();
+  if (!txt) return;
+
+  const rows = txt.split(/\n+/).map(r => r.trim()).filter(Boolean);
+  const parsed = rows.map(r => r.split(/[\s,]+/).filter(Boolean).map(Number));
+
+  const k = parsed.length;
+  if (!(k===3 || k===5)) {
+    alert("Kernel text must be 3 rows or 5 rows.");
+    return;
+  }
+  for (const r of parsed) {
+    if (r.length !== k) {
+      alert("Kernel must be a square matrix (3×3 or 5×5).");
+      return;
+    }
+  }
+
+  const w = [];
+  for (let y=0;y<k;y++) for (let x=0;x<k;x++) w.push(Number.isFinite(parsed[y][x]) ? parsed[y][x] : 0);
+  setKernel(k, w);
+  el("kernelPreset").value = "custom";
+}
+
+function normalizeKernelSumTo1() {
+  const w = readKernelFromGrid();
+  let s = 0;
+  for (let i=0;i<w.length;i++) s += w[i];
+  if (Math.abs(s) < 1e-12) return;
+  for (let i=0;i<w.length;i++) w[i] /= s;
+  state.kernel = w;
+  makeKernelGrid(state.kSize);
+  copyGridToText();
+  el("kernelPreset").value = "custom";
+}
+
+function zeroMeanKernel() {
+  const w = readKernelFromGrid();
+  let m = 0;
+  for (let i=0;i<w.length;i++) m += w[i];
+  m /= w.length;
+  for (let i=0;i<w.length;i++) w[i] -= m;
+  state.kernel = w;
+  makeKernelGrid(state.kSize);
+  copyGridToText();
+  el("kernelPreset").value = "custom";
+}
+
+/* ============================
+   Patterns
+============================ */
+function makePattern(N, kind) {
+  const x = new Float32Array(N*N);
+  const mid = (N/2)|0;
+
+  const idx = (r,c) => r*N + c;
+
+  if (kind === "impulse") {
+    x[idx(mid, mid)] = 1;
+  } else if (kind === "hline") {
+    for (let c=0;c<N;c++) x[idx(mid, c)] = 1;
+  } else if (kind === "vline") {
+    for (let r=0;r<N;r++) x[idx(r, mid)] = 1;
+  } else if (kind === "square") {
+    const rad = Math.max(4, (N/10)|0);
+    for (let r=mid-rad;r<=mid+rad;r++) for (let c=mid-rad;c<=mid+rad;c++) x[idx(r,c)] = 1;
+  } else if (kind === "ring") {
+    const r1 = Math.max(6, (N/10)|0);
+    const r2 = Math.max(r1+2, (N/7)|0);
+    for (let r=0;r<N;r++) for (let c=0;c<N;c++) {
+      const dr = r-mid, dc = c-mid;
+      const d2 = dr*dr + dc*dc;
+      if (d2 >= r1*r1 && d2 <= r2*r2) x[idx(r,c)] = 1;
+    }
+  } else if (kind === "checker") {
+    const block = Math.max(4, (N/16)|0);
+    for (let r=0;r<N;r++) for (let c=0;c<N;c++) {
+      const v = (((r/block)|0) + ((c/block)|0)) % 2 === 0 ? 1 : -1;
+      x[idx(r,c)] = v;
+    }
+  } else if (kind === "noise") {
+    // Gaussian-ish via Box-Muller
+    for (let i=0;i<x.length;i+=2) {
+      const u1 = Math.max(1e-12, Math.random());
+      const u2 = Math.random();
+      const mag = Math.sqrt(-2*Math.log(u1));
+      x[i] = mag * Math.cos(2*Math.PI*u2);
+      if (i+1 < x.length) x[i+1] = mag * Math.sin(2*Math.PI*u2);
+    }
+  }
+
+  return x;
+}
+
+/* ============================
+   Convolution + activation
+============================ */
+function sampleWithPadding(x, N, r, c, mode) {
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  if (mode === "zero") {
+    if (r<0 || r>=N || c<0 || c>=N) return 0;
+    return x[r*N + c];
+  }
+  if (mode === "wrap") {
+    const rr = ((r % N) + N) % N;
+    const cc = ((c % N) + N) % N;
+    return x[rr*N + cc];
+  }
+  // reflect
+  const rr = reflectIndex(r, N);
+  const cc = reflectIndex(c, N);
+  return x[rr*N + cc];
+}
+
+function reflectIndex(i, N) {
+  // reflect: ... 2 1 0 1 2 3 ... N-2 N-1 N-2 ...
+  if (N === 1) return 0;
+  let t = i;
+  while (t < 0 || t >= N) {
+    if (t < 0) t = -t - 1;
+    else t = 2*N - t - 1;
+  }
+  return t;
+}
+
+function applyActivation(v, act) {
+  if (act === "identity") return v;
+  if (act === "relu") return v > 0 ? v : 0;
+  // tanh
+  return Math.tanh(v);
+}
+
+function conv2dSingle(x, N, k, w, padMode) {
+  const out = new Float32Array(N*N);
+  const rad = (k/2)|0;
+  for (let r=0;r<N;r++) {
+    for (let c=0;c<N;c++) {
+      let s = 0;
+      for (let ky=0; ky<k; ky++) {
+        for (let kx=0; kx<k; kx++) {
+          const rr = r + (ky - rad);
+          const cc = c + (kx - rad);
+          const xv = sampleWithPadding(x, N, rr, cc, padMode);
+          s += xv * w[ky*k + kx];
+        }
+      }
+      out[r*N + c] = s;
+    }
+  }
+  return out;
+}
+
+function normalizeFrame(x, mode) {
+  if (mode === "none") return x;
+
+  if (mode === "perstepstd") {
+    let m = 0;
+    for (let i=0;i<x.length;i++) m += x[i];
+    m /= x.length;
+    let v = 0;
+    for (let i=0;i<x.length;i++) {
+      const d = x[i] - m;
+      v += d*d;
+    }
+    v /= x.length;
+    const s = Math.sqrt(v) || 1;
+    const y = new Float32Array(x.length);
+    for (let i=0;i<x.length;i++) y[i] = x[i] / s;
+    return y;
+  }
+
+  // perstepmax
+  let mx = 0;
+  for (let i=0;i<x.length;i++) mx = Math.max(mx, Math.abs(x[i]));
+  mx = mx || 1;
+  const y = new Float32Array(x.length);
+  for (let i=0;i<x.length;i++) y[i] = x[i] / mx;
+  return y;
+}
+
+/* ============================
+   “μ, σ” along the central row (like your python)
+============================ */
+function statsCentralRow(x, N) {
+  const mid = (N/2)|0;
+  // vals = x[mid, :]
+  let sum = 0;
+  for (let c=0;c<N;c++) sum += x[mid*N + c];
+  // avoid divide by 0; treat as zeros
+  if (Math.abs(sum) < 1e-12) return { mu: 0, sigma: 0 };
+
+  // normalized weights
+  let mu = 0;
+  for (let c=0;c<N;c++) {
+    const pos = c - mid;
+    const w = x[mid*N + c] / sum;
+    mu += pos * w;
+  }
+  let varr = 0;
+  for (let c=0;c<N;c++) {
+    const pos = c - mid;
+    const w = x[mid*N + c] / sum;
+    const d = pos - mu;
+    varr += d*d * w;
+  }
+  return { mu, sigma: Math.sqrt(Math.max(0, varr)) };
+}
+
+/* ============================
+   Rendering
+============================ */
+function renderFrame(x) {
+  const N = state.N;
+  const img = ctx.createImageData(N, N);
+
+  // robust scale around 0 for signed heatmap:
+  // use max abs as normalization, then apply gain
+  let mx = 0;
+  for (let i=0;i<x.length;i++) mx = Math.max(mx, Math.abs(x[i]));
+  mx = mx || 1;
+  const g = state.gain;
+
+  // blue (neg) <-> red (pos), dark background
+  for (let i=0;i<x.length;i++) {
+    const v = (x[i] / mx) * g;
+    const t = Math.max(-1, Math.min(1, v));
+    // map t in [-1,1] to RGB
+    const r = t > 0 ? 20 + 235*t : 20;
+    const b = t < 0 ? 20 + 235*(-t) : 20;
+    const a = 255;
+
+    img.data[4*i+0] = r|0;
+    img.data[4*i+1] = 20;
+    img.data[4*i+2] = b|0;
+    img.data[4*i+3] = a;
+  }
+  ctx.putImageData(img, 0, 0);
+
+  // crosshair
+  if (state.crosshair) {
+    const mid = (N/2)|0;
+    ctx.save();
+    ctx.strokeStyle = "rgba(255,255,255,0.55)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(mid+0.5, 0);
+    ctx.lineTo(mid+0.5, N);
+    ctx.moveTo(0, mid+0.5);
+    ctx.lineTo(N, mid+0.5);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+/* ============================
+   Simulation
+============================ */
+function simulate() {
+  state.playing = false;
+  state.t = 0;
+  el("gifStatus").textContent = "";
+
+  const N = state.N;
+  const k = state.kSize;
+  const w = readKernelFromGrid();
+  const act = state.activation;
+  const pad = state.padding;
+  const normMode = state.norm;
+
+  let x = makePattern(N, state.pattern);
+  x = normalizeFrame(x, normMode);
+
+  state.frames = [];
+  state.frames.push(x);
+
+  for (let t=1; t<=state.steps; t++) {
+    const y = conv2dSingle(x, N, k, w, pad);
+    const z = new Float32Array(y.length);
+    for (let i=0;i<y.length;i++) z[i] = applyActivation(y[i], act);
+    x = normalizeFrame(z, normMode);
+    state.frames.push(x);
+  }
+
+  updateUIFromFrame();
+  renderFrame(state.frames[0]);
+}
+
+function updateUIFromFrame() {
+  const x = state.frames[state.t];
+  const st = statsCentralRow(x, state.N);
+  el("tLabel").textContent = state.t;
+  el("muLabel").textContent = st.mu.toFixed(2);
+  el("sigmaLabel").textContent = st.sigma.toFixed(2);
+}
+
+/* ============================
+   Playback loop
+============================ */
+function tick(ts) {
+  requestAnimationFrame(tick);
+
+  if (!state.playing || state.frames.length === 0) return;
+
+  const interval = 1000 / state.fps;
+  if (ts - state.lastFrameTime < interval) return;
+
+  state.lastFrameTime = ts;
+  state.t = (state.t + 1) % state.frames.length;
+  updateUIFromFrame();
+  renderFrame(state.frames[state.t]);
+}
+
+/* ============================
+   GIF Export
+============================ */
+async function exportGIF() {
+  if (!state.frames || state.frames.length === 0) {
+    alert("Simulate first.");
+    return;
+  }
+
+  const status = el("gifStatus");
+  status.textContent = "Encoding GIF…";
+
+  const N = state.N;
+  const gif = new GIF({
+    workers: Math.min(4, navigator.hardwareConcurrency || 2),
+    quality: 10,
+    width: N,
+    height: N,
+    workerScript: "https://cdn.jsdelivr.net/npm/gif.js.optimized/dist/gif.worker.js"
+  });
+
+  // Render each frame onto the existing canvas then add it
+  const delay = Math.round(1000 / state.fps);
+
+  const oldCrosshair = state.crosshair;
+  state.crosshair = false; // cleaner GIF; toggle back after
+
+  for (let t=0; t<state.frames.length; t++) {
+    renderFrame(state.frames[t]);
+    gif.addFrame(ctx, {copy: true, delay});
+    status.textContent = `Encoding GIF… (${t+1}/${state.frames.length})`;
+    // yield to UI occasionally
+    if (t % 10 === 0) await new Promise(r => setTimeout(r, 0));
+  }
+
+  state.crosshair = oldCrosshair;
+  renderFrame(state.frames[state.t]);
+
+  gif.on("finished", (blob) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `conv_propagation_N${state.N}_T${state.steps}.gif`;
+    a.click();
+    status.textContent = `Done. Downloaded GIF (${(blob.size/1024/1024).toFixed(2)} MB).`;
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  });
+
+  gif.on("progress", (p) => {
+    status.textContent = `Encoding GIF… ${(p*100).toFixed(0)}%`;
+  });
+
+  gif.render();
+}
+
+/* ============================
+   Wire up UI
+============================ */
+function resetAll() {
+  state.N = 128;
+  state.steps = 40;
+  state.fps = 20;
+  state.gain = 1.5;
+  state.crosshair = true;
+  state.activation = "identity";
+  state.padding = "zero";
+  state.norm = "perstepstd";
+  state.pattern = "impulse";
+  setKernel(3, presets.gauss3.w);
+  el("kernelPreset").value = "gauss3";
+
+  el("patternSelect").value = state.pattern;
+  el("actSelect").value = state.activation;
+  el("padSelect").value = state.padding;
+  el("normSelect").value = state.norm;
+  el("gridSize").value = state.N;
+  el("steps").value = state.steps;
+  el("fps").value = state.fps;
+  el("gain").value = state.gain;
+  el("crosshair").value = "on";
+
+  setCanvasSize(state.N);
+  syncLabels();
+  simulate();
+}
+
+el("btnReset").addEventListener("click", resetAll);
+
+el("patternSelect").addEventListener("change", (e) => { state.pattern = e.target.value; });
+el("actSelect").addEventListener("change", (e) => { state.activation = e.target.value; });
+el("padSelect").addEventListener("change", (e) => { state.padding = e.target.value; });
+el("normSelect").addEventListener("change", (e) => { state.norm = e.target.value; });
+
+el("gridSize").addEventListener("input", (e) => {
+  state.N = parseInt(e.target.value, 10);
+  setCanvasSize(state.N);
+  syncLabels();
+});
+
+el("steps").addEventListener("input", (e) => {
+  state.steps = parseInt(e.target.value, 10);
+  syncLabels();
+});
+
+el("fps").addEventListener("input", (e) => {
+  state.fps = parseInt(e.target.value, 10);
+  syncLabels();
+});
+
+el("gain").addEventListener("input", (e) => {
+  state.gain = parseFloat(e.target.value);
+  if (state.frames.length) renderFrame(state.frames[state.t]);
+});
+
+el("crosshair").addEventListener("change", (e) => {
+  state.crosshair = (e.target.value === "on");
+  if (state.frames.length) renderFrame(state.frames[state.t]);
+});
+
+el("kernelPreset").addEventListener("change", (e) => {
+  const key = e.target.value;
+  if (key === "custom") return;
+  const p = presets[key];
+  if (!p) return;
+  setKernel(p.k, p.w);
+});
+
+el("kSize").addEventListener("change", (e) => {
+  const k = parseInt(e.target.value, 10);
+  // keep existing values when resizing if possible; otherwise default zeros
+  const old = readKernelFromGrid();
+  const oldK = state.kSize;
+  const w = new Float32Array(k*k);
+  if (old && oldK) {
+    const minK = Math.min(oldK, k);
+    const oldRad = (oldK/2)|0;
+    const newRad = (k/2)|0;
+    for (let y=0;y<minK;y++) for (let x=0;x<minK;x++) {
+      const oy = y + (oldRad - ((minK/2)|0));
+      const ox = x + (oldRad - ((minK/2)|0));
+      const ny = y + (newRad - ((minK/2)|0));
+      const nx = x + (newRad - ((minK/2)|0));
+      w[ny*k + nx] = old[oy*oldK + ox] || 0;
+    }
+  }
+  state.kernel = w;
+  makeKernelGrid(k);
+  copyGridToText();
+  el("kernelPreset").value = "custom";
+});
+
+el("btnNormalizeKernel").addEventListener("click", normalizeKernelSumTo1);
+el("btnZeroMeanKernel").addEventListener("click", zeroMeanKernel);
+el("btnApplyText").addEventListener("click", applyTextToGrid);
+el("btnCopyText").addEventListener("click", copyGridToText);
+el("btnClearKernel").addEventListener("click", () => {
+  const k = state.kSize;
+  setKernel(k, new Array(k*k).fill(0));
+  el("kernelPreset").value = "custom";
+});
+
+el("btnSim").addEventListener("click", () => {
+  setCanvasSize(state.N);
+  simulate();
+  renderFrame(state.frames[state.t]);
+});
+
+el("btnPlay").addEventListener("click", () => {
+  if (!state.frames.length) simulate();
+  state.playing = true;
+});
+
+el("btnPause").addEventListener("click", () => {
+  state.playing = false;
+});
+
+el("btnStep").addEventListener("click", () => {
+  if (!state.frames.length) simulate();
+  state.playing = false;
+  state.t = Math.min(state.t + 1, state.frames.length - 1);
+  updateUIFromFrame();
+  renderFrame(state.frames[state.t]);
+});
+
+el("btnGif").addEventListener("click", exportGIF);
+
+/* ============================
+   Init
+============================ */
+(function init() {
+  // default kernel
+  setKernel(3, presets.gauss3.w);
+  el("kernelPreset").value = "gauss3";
+
+  setCanvasSize(state.N);
+  syncLabels();
+  simulate();
+  renderFrame(state.frames[0]);
+  requestAnimationFrame(tick);
+})();
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
