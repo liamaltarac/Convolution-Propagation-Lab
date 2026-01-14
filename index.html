@@ -372,17 +372,17 @@
             </select>
 
             <label class="form-label mt-3 d-flex justify-content-between">
-              <span>Symmetric ↔ Antisymmetric mix (β)</span>
+              <span>Symmetric ↔ Antisymmetric mix (β²)</span>
               <span class="muted tiny" id="betaLabel">0.50</span>
             </label>
             <input id="betaMix" type="range" class="form-range" min="0" max="1" step="0.01" value="0.5"/>
             <div class="muted tiny" id="betaHint">
-              β = 0 emphasizes symmetric structure, β = 1 emphasizes antisymmetric structure.
+              β² = 0 emphasizes symmetric structure, β² = 1 emphasizes antisymmetric structure.
             </div>
 
             <div class="mt-3">
               <div class="fw-semibold">Mixed kernel (derived)</div>
-              <div class="muted tiny mb-2">Computed as (1 − β)·sym + β·antisym.</div>
+              <div class="muted tiny mb-2">Computed as √(β²)·antisym + √(1 − β²)·sym.</div>
               <div id="kernelGridWrap"></div>
             </div>
 
@@ -656,10 +656,42 @@ function decomposeKernel(w, k) {
   return { sym, anti };
 }
 
-function combineKernel(sym, anti, beta) {
+function normSquared(values) {
+  let total = 0;
+  for (let i=0;i<values.length;i++) total += values[i] * values[i];
+  return total;
+}
+
+function normalizeUnitKernel(values) {
+  const n2 = normSquared(values);
+  if (n2 < 1e-12) return false;
+  const scale = 1 / Math.sqrt(n2);
+  for (let i=0;i<values.length;i++) values[i] *= scale;
+  return true;
+}
+
+function updateBetaFromComponents() {
+  const symEnergy = normSquared(state.symKernel);
+  const antiEnergy = normSquared(state.antiKernel);
+  const total = symEnergy + antiEnergy;
+  if (total < 1e-12) {
+    state.beta = 0;
+    return;
+  }
+  state.beta = antiEnergy / total;
+}
+
+function normalizeComponentsToUnit() {
+  normalizeUnitKernel(state.symKernel);
+  normalizeUnitKernel(state.antiKernel);
+}
+
+function combineKernel(sym, anti, beta2) {
   const w = new Float32Array(sym.length);
+  const antiScale = Math.sqrt(beta2);
+  const symScale = Math.sqrt(1 - beta2);
   for (let i=0;i<w.length;i++) {
-    w[i] = (1 - beta) * sym[i] + beta * anti[i];
+    w[i] = symScale * sym[i] + antiScale * anti[i];
   }
   return w;
 }
@@ -713,21 +745,25 @@ function updateFullKernelText() {
 }
 
 function updateBetaAvailability() {
-  const eps = 1e-8;
-  const symEnergy = state.symKernel.reduce((acc, v) => acc + Math.abs(v), 0);
-  const antiEnergy = state.antiKernel.reduce((acc, v) => acc + Math.abs(v), 0);
+  const eps = 1e-12;
+  const symEnergy = normSquared(state.symKernel);
+  const antiEnergy = normSquared(state.antiKernel);
   const betaInput = el("betaMix");
-  if (symEnergy < eps) {
+  if (symEnergy < eps && antiEnergy < eps) {
+    state.beta = 0;
+    betaInput.disabled = true;
+    el("betaHint").textContent = "No kernel components detected; β² fixed at 0.";
+  } else if (symEnergy < eps) {
     state.beta = 1;
     betaInput.disabled = true;
-    el("betaHint").textContent = "No symmetric component detected; β fixed at 1.";
+    el("betaHint").textContent = "No symmetric component detected; β² fixed at 1.";
   } else if (antiEnergy < eps) {
     state.beta = 0;
     betaInput.disabled = true;
-    el("betaHint").textContent = "No antisymmetric component detected; β fixed at 0.";
+    el("betaHint").textContent = "No antisymmetric component detected; β² fixed at 0.";
   } else {
     betaInput.disabled = false;
-    el("betaHint").textContent = "β = 0 emphasizes symmetric structure, β = 1 emphasizes antisymmetric structure.";
+    el("betaHint").textContent = "β² = 0 emphasizes symmetric structure, β² = 1 emphasizes antisymmetric structure.";
   }
   betaInput.value = state.beta.toFixed(2);
   el("betaLabel").textContent = state.beta.toFixed(2);
@@ -754,7 +790,8 @@ function setKernel(k, w) {
   const { sym, anti } = decomposeKernel(w, k);
   state.symKernel = sym;
   state.antiKernel = anti;
-  state.beta = 0.5;
+  updateBetaFromComponents();
+  normalizeComponentsToUnit();
   el("kSize").value = String(k);
   updateBetaAvailability();
   updateKernelFromComponents();
@@ -772,6 +809,7 @@ function normalizeKernelSumTo1() {
     state.symKernel[i] *= scale;
     state.antiKernel[i] *= scale;
   }
+  normalizeComponentsToUnit();
   updateBetaAvailability();
   updateKernelFromComponents();
   updateComponentEditors();
@@ -784,6 +822,7 @@ function zeroMeanKernel() {
   for (let i=0;i<state.symKernel.length;i++) m += state.symKernel[i];
   m /= state.symKernel.length;
   for (let i=0;i<state.symKernel.length;i++) state.symKernel[i] -= m;
+  normalizeComponentsToUnit();
   updateBetaAvailability();
   updateKernelFromComponents();
   updateComponentEditors();
@@ -798,6 +837,7 @@ function applySymText() {
   state.kSize = parsed.k;
   state.symKernel = new Float32Array(parsed.w);
   state.antiKernel = resizeKernelArray(state.antiKernel, oldK, parsed.k);
+  normalizeComponentsToUnit();
   el("kSize").value = String(parsed.k);
   el("kernelPreset").value = "custom";
   updateBetaAvailability();
@@ -813,6 +853,7 @@ function applyAntiText() {
   state.kSize = parsed.k;
   state.antiKernel = new Float32Array(parsed.w);
   state.symKernel = resizeKernelArray(state.symKernel, oldK, parsed.k);
+  normalizeComponentsToUnit();
   el("kSize").value = String(parsed.k);
   el("kernelPreset").value = "custom";
   updateBetaAvailability();
