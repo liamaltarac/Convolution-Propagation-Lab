@@ -639,18 +639,24 @@ function makeKernelGrid({ wrapId, k, values, readOnly, onInput }) {
 }
 
 function decomposeKernel(w, k) {
-  const sym = new Float32Array(k*k);
-  const anti = new Float32Array(k*k);
-  for (let y=0;y<k;y++) {
-    for (let x=0;x<k;x++) {
-      const i = y*k + x;
-      const my = k - 1 - y;
-      const mx = k - 1 - x;
-      const j = my*k + mx;
-      const a = w[i];
-      const b = w[j];
-      sym[i] = (a + b) / 2;
-      anti[i] = (a - b) / 2;
+  const sym = new Float32Array(k * k);
+  const anti = new Float32Array(k * k);
+  const sum = new Float32Array(k * k);
+  for (let y = 0; y < k; y++) {
+    for (let x = 0; x < k; x++) {
+      const i = y * k + x;
+      const fx = y * k + (k - 1 - x);
+      const fy = (k - 1 - y) * k + x;
+      const fxy = (k - 1 - y) * k + (k - 1 - x);
+      sum[i] = w[i] + w[fx] + w[fy] + w[fxy];
+    }
+  }
+  for (let y = 0; y < k; y++) {
+    for (let x = 0; x < k; x++) {
+      const i = y * k + x;
+      const rot = sum[x * k + (k - 1 - y)];
+      sym[i] = (sum[i] + rot) / 8;
+      anti[i] = w[i] - sym[i];
     }
   }
   return { sym, anti };
