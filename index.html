@@ -237,6 +237,8 @@
               <option value="identity">Identity</option>
               <option value="relu">ReLU</option>
               <option value="tanh">tanh</option>
+              <option value="silu">SiLU (Swish)</option>
+              <option value="gelu">GELU (Gaussian)</option>
               <option value="mod">mod (Absolute Value)</option>
 
             </select>
@@ -993,9 +995,27 @@ function applyActivation(v, act) {
   if (act === "identity") return v;
   if (act === "relu") return v > 0 ? v : 0;
   if (act === "mod") return Math.abs(v);
+  if (act === "silu") return v * sigmoid(v);
+  if (act === "gelu") return gelu(v);
 
   // tanh
   return Math.tanh(v);
+}
+
+function sigmoid(x) {
+  if (x >= 0) {
+    const z = Math.exp(-x);
+    return 1 / (1 + z);
+  }
+  const z = Math.exp(x);
+  return z / (1 + z);
+}
+
+function gelu(x) {
+  // GELU tanh approximation: x * 0.5 * (1 + tanh(sqrt(2/pi) * (x + 0.044715x^3)))
+  const c = Math.sqrt(2 / Math.PI);
+  const x3 = x * x * x;
+  return 0.5 * x * (1 + Math.tanh(c * (x + 0.044715 * x3)));
 }
 
 function conv2dSingle(x, N, k, w, padMode) {

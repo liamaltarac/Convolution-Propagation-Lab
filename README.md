@@ -7,7 +7,7 @@ An interactive browser-based sandbox to explore how repeated convolution and act
 - **Interactive Viewer**: Visualize signal propagation as a heatmap.
 - **Customizable Kernels**: Edit or paste kernel matrices (3×3 or 5×5).
 - **Pattern Selection**: Choose from predefined input patterns like impulse, lines, squares, and noise.
-- **Activation Functions**: Switch between Identity, ReLU, and tanh.
+- **Activation Functions**: Switch between Identity, ReLU, tanh, SiLU, GELU, and mod (absolute value).
 - **Boundary Handling**: Experiment with zero padding, wrap, or reflect modes.
 - **Normalization Options**: Per-step standardization or scaling.
 - **GIF Export**: Save the simulation as an animated GIF.
