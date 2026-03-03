@@ -1061,6 +1061,8 @@ function rotateKernel(w, k, theta) {
   const rad = (k / 2) | 0;
   const cosT = Math.cos(theta);
   const sinT = Math.sin(theta);
+  let sumIn = 0;
+  for (let i = 0; i < w.length; i++) sumIn += w[i];
   for (let y = 0; y < k; y++) {
     for (let x = 0; x < k; x++) {
       const dx = x - rad;
@@ -1071,6 +1073,14 @@ function rotateKernel(w, k, theta) {
       const ox = sx + rad;
       const oy = sy + rad;
       out[y * k + x] = sampleKernelBilinear(w, k, oy, ox);
+    }
+  }
+  if (Math.abs(sumIn) > 1e-12) {
+    let sumOut = 0;
+    for (let i = 0; i < out.length; i++) sumOut += out[i];
+    if (Math.abs(sumOut) > 1e-12) {
+      const scale = sumIn / sumOut;
+      for (let i = 0; i < out.length; i++) out[i] *= scale;
     }
   }
   return out;
